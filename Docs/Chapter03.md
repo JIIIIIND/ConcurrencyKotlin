@@ -366,3 +366,24 @@ Job이 이전 상태로 돌아가지 않을 것이라는 점을 고려하면 해
 
 안드로이드 RSS 리더의 기능을 개선
 
+1. fetchRssHeadlines 함수 개선
+   1. 고정된 feed를 인자로 받아서 처리할 수 있도록 수정
+   2. Dispatcher를 받아 비동기로 동작하도록 수정
+2. dispatcher를 업데이트
+   1. newSingleThreadContext(name = "ServiceCall")에서 newFixedThreadPoolContent(2, "IO")로 변경
+   2. asyncFetchHeadlines()는 서버에서 정보를 가져오고 파싱도 하기 때문에 풀의 크기를 늘림
+   3. XML을 파싱하는 오버헤드는 단일 스레드를 사용하는 경우 성능에 영향을 줌
+   4. 때로는 다른 스레드의 파싱이 완료될 때까지 한 피드로부터 정보를 가져오는 것이 지연될 수 있음
+3. 데이터를 동시에 가져오기
+   1. 목록에서 각 피드당 하나의 Deferred를 생성
+   2. asyncLoadNews 함수를 수정해 대기하는 모든 Deferred를 추적할 수 있는 목록을 구현
+4. 응답 병합
+   1. asyncLoadNews는 각 요청이 끝날 때까지 대기함
+   2. 각각이 헤드라인의 목록을 반환하기 때문에 이들을 하나의 리스트에 담을 수 있음 -> Deferred의 내용을 flat map을 이용해 담을 수 있음
+5. 예외 처리
+   1. 코루틴이 완료될때 까지 await을 사용해 대기하므로 코루틴 내부의 예외는 현재 스레드로 전파됨
+   2. 인터넷이 연결되지 않았거나 feed URL이 유효하지 않은 경우 예외가 발생
+   3. await 대신 join을 사용해 Deferred를 대기
+   4. 요청을 읽을 때에도 예외가 전파되기 때문에 getCompleted()를 호출하기 이전에 isCancelled를 통해 필터링
+   5. 네트워크 연결이 없는 장치나 잘못된 URL이 있어도 중단 없이 실행 됨
+6. 예외 처리된 Feed에 대해서도 표시할 수 있도록 UI 수정

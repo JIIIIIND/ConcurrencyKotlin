@@ -28,16 +28,17 @@ class MainActivity : AppCompatActivity() {
     val feeds = listOf(
         "https://www.npr.org/rss/rss.php?id=1001",
         "http://rss.cnn.com/rss/cnn_topstories.rss",
-        "http://feeds.foxnews.com/foxnews/politics?format=xml"
+        "http://feeds.foxnews.com/foxnews/politics?format=xml",
+        "http://myNewsFeed"
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
         // 1번 옵션 사용 시 아래와 같이 Dispatcher를 지정해야 함
-        GlobalScope.launch (dispatcher) {
-            loadNews()
-        }
+//        GlobalScope.launch (dispatcher) {
+//            loadNews()
+//        }
         // 2번 옵션 사용 시 아래와 같이 바로 호출할 수 있음. 하지만 백그라운드 스레드에서 강제로 실행되기에 함수의 유연성이 떨어짐
         // 비동기로 실행된다는 것을 명시적으로 나타내기 위해 관례적으로 async라는 명칭을 앞에 붙임
         asyncLoadNews()
@@ -108,25 +109,29 @@ class MainActivity : AppCompatActivity() {
         }
         // 각 코드가 완료될 때까지 대기
         requests.forEach {
-            it.await()
+            it.join()
         }
 
         // 세 개의 피드에서 동시에 가져온 모든 헤드 라인을 포함하는 headlines 변수
-        val headlines = requests.flatMap {
-            it.getCompleted()
-        }
+        val headlines = requests
+            .filter { !it.isCancelled }
+            .flatMap { it.getCompleted() }
+
+        val failed = requests
+            .filter { it.isCancelled }
+            .size
 
         // 헤드라인의 정보를 메시지에 표시
         val newsCount = binding.newsCount
-        launch(Dispatchers.Main) {
-            newsCount.text = "Found ${headlines.size} News " +
-                    "in ${requests.size} feeds"
-        }
-    }
+        val warning = binding.warnings
+        val obtained = requests.size - failed
 
-    override fun onResume() {
-        super.onResume()
-        // 이러면 메인 스레드가 정지되기 때문에 화면이 업데이트 되지 않음 -> UI 스레드는 뷰를 만들고 업데이트 하는곳에 사용하고 나머지는 백그라운드 스레드를 사용
-//        Thread.sleep(5000)
+        GlobalScope.launch(Dispatchers.Main) {
+            newsCount.text = "Found ${headlines.size} News " +
+                    "in $obtained feeds"
+            if (failed > 0) {
+                warning.text = "Failed to fetch $failed feeds"
+            }
+        }
     }
 }
