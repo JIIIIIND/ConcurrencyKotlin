@@ -21,9 +21,16 @@ class MainActivity : AppCompatActivity() {
      * 이 Dispatcher를 사용하는 코루틴은 모두 특정 스레드에서 실행이 됨
     */
     @ExperimentalCoroutinesApi
-    private val dispatcher = newSingleThreadContext(name = "ServiceCall")
+    private val dispatcher = newFixedThreadPoolContext(2, "IO")
     private val factory = DocumentBuilderFactory.newInstance()
     private val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
+
+    val feeds = listOf(
+        "https://www.npr.org/rss/rss.php?id=1001",
+        "http://rss.cnn.com/rss/cnn_topstories.rss",
+        "http://feeds.foxnews.com/foxnews/politics?format=xml"
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
@@ -36,6 +43,28 @@ class MainActivity : AppCompatActivity() {
         asyncLoadNews()
     }
 
+    /*
+     * Chapter 3에서 사용
+     * feed와 dispatcher를 인자로 받아 비동기로 처리
+     */
+    private fun asyncFetchHeadlines(feed: String, dispatcher: CoroutineDispatcher) = GlobalScope.async(dispatcher) {
+        val builder = factory.newDocumentBuilder()
+        val xml = builder.parse(feed)
+        val news = xml.getElementsByTagName("channel").item(0)
+
+        (0 until news.childNodes.length)
+            .map { news.childNodes.item(it) }
+            .filter { Node.ELEMENT_NODE == it.nodeType }
+            .map { it as Element }
+            .filter { "item" == it.tagName }
+            .map {
+                it.getElementsByTagName("title").item(0).textContent
+            }
+    }
+
+    /*
+     * Chapter 2에서 사용된 함수
+     */
     private fun fetchRssHeadlines(): List<String> {
         val builder = factory.newDocumentBuilder()
         val xml = builder.parse("https://www.npr.org/rss/rss.php?id=1001")
@@ -61,12 +90,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 2. 미리 정의된 디스패처를 갖는 비동기 함수
-    private fun asyncLoadNews() = GlobalScope.launch (dispatcher) {
-        val headlines = fetchRssHeadlines()
+    // 2. 미리 정의된 디스패처를 갖는 비동기 함수, Chapter2에서 사용됨
+//    private fun asyncLoadNews() = GlobalScope.launch (dispatcher) {
+//        val headlines = fetchRssHeadlines()
+//        val newsCount = binding.newsCount
+//        launch(Dispatchers.Main) {
+//            newsCount.text = "Found ${headlines.size} News"
+//        }
+//    }
+
+    private fun asyncLoadNews() = GlobalScope.launch {
+        val requests = mutableListOf<Deferred<List<String>>>()
+
+        // 각 피드별로 가져온 요소를 피드 목록에 추가
+        feeds.mapTo(requests) {
+            asyncFetchHeadlines(it, dispatcher)
+        }
+        // 각 코드가 완료될 때까지 대기
+        requests.forEach {
+            it.await()
+        }
+
+        // 세 개의 피드에서 동시에 가져온 모든 헤드 라인을 포함하는 headlines 변수
+        val headlines = requests.flatMap {
+            it.getCompleted()
+        }
+
+        // 헤드라인의 정보를 메시지에 표시
         val newsCount = binding.newsCount
         launch(Dispatchers.Main) {
-            newsCount.text = "Found ${headlines.size} News"
+            newsCount.text = "Found ${headlines.size} News " +
+                    "in ${requests.size} feeds"
         }
     }
 
