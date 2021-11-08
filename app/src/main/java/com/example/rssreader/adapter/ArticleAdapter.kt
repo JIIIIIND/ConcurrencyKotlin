@@ -7,9 +7,18 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.example.rssreader.databinding.ArticleBinding
 import com.example.rssreader.model.Article
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
-class ArticleAdapter : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
-    val articles: MutableList<Article> = mutableListOf()
+interface ArticleLoader {
+    suspend fun loadMore()
+}
+
+class ArticleAdapter(
+    private val loader: ArticleLoader
+    ) : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
+    private val articles: MutableList<Article> = mutableListOf()
+    private var loading = false
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val binding = ArticleBinding.inflate(LayoutInflater.from(parent.context))
@@ -19,6 +28,13 @@ class ArticleAdapter : RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val article = articles[position]
 
+        if (!loading && position >= articles.size - 2) {
+            loading = true
+            GlobalScope.launch {
+                loader.loadMore()
+                loading = false
+            }
+        }
         holder.feed.text = article.feed
         holder.title.text = article.title
         holder.summary.text = article.summary

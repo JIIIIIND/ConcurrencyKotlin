@@ -60,39 +60,7 @@ class MainActivity : AppCompatActivity() {
 //        }
         // 2번 옵션 사용 시 아래와 같이 바로 호출할 수 있음. 하지만 백그라운드 스레드에서 강제로 실행되기에 함수의 유연성이 떨어짐
         // 비동기로 실행된다는 것을 명시적으로 나타내기 위해 관례적으로 async라는 명칭을 앞에 붙임
-        asyncLoadNews()
-    }
-
-    /*
-     * Chapter 3에서 사용
-     * feed와 dispatcher를 인자로 받아 비동기로 처리
-     * Chapter04에서 title만 추출하는 부분을 data class 형식으로 변경함
-     */
-    private fun asyncFetchArticles(feed: Feed, dispatcher: CoroutineDispatcher) = GlobalScope.async(dispatcher) {
-        delay(1000)
-        val builder = factory.newDocumentBuilder()
-        val xml = builder.parse(feed.url)
-        val news = xml.getElementsByTagName("channel").item(0)
-
-        (0 until news.childNodes.length)
-            .map { news.childNodes.item(it) }
-            .filter { Node.ELEMENT_NODE == it.nodeType }
-            .map { it as Element }
-            .filter { "item" == it.tagName }
-            .map {
-                val title = it.getElementsByTagName("title")
-                    .item(0)
-                    .textContent
-                var summary = it.getElementsByTagName("description")
-                    .item(0)
-                    .textContent
-                // Summary가 비어있는 것을 피하기 위해 div로 시작하지 않는 경우에만 잘라냄
-                if (!summary.startsWith("<div")
-                    && summary.contains("<div")) {
-                    summary = summary.substring(0, summary.indexOf("<div"))
-                }
-                Article(feed.name, title, summary)
-            }
+//        asyncLoadNews()
     }
 
     /*
@@ -136,31 +104,31 @@ class MainActivity : AppCompatActivity() {
     }
      */
 
-    private fun asyncLoadNews() = GlobalScope.launch {
-        val requests = mutableListOf<Deferred<List<Article>>>()
-
-        // 각 피드별로 가져온 요소를 피드 목록에 추가
-        feeds.mapTo(requests) {
-            asyncFetchArticles(it, dispatcher)
-        }
-        // 각 코드가 완료될 때까지 대기
-        requests.forEach {
-            it.join()
-        }
-
-        // 세 개의 피드에서 동시에 가져온 모든 헤드 라인을 포함하는 headlines 변수
-        val articles = requests
-            .filter { !it.isCancelled }
-            .flatMap { it.getCompleted() }
-
-        val failed = requests
-            .filter { it.isCancelled }
-            .size
-        val obtained = requests.size - failed
-
-        launch(Dispatchers.Main) {
-            binding.progressBar.visibility = View.GONE
-            viewAdapter.add(articles)
-        }
-    }
+//    private fun asyncLoadNews() = GlobalScope.launch {
+//        val requests = mutableListOf<Deferred<List<Article>>>()
+//
+//        // 각 피드별로 가져온 요소를 피드 목록에 추가
+//        feeds.mapTo(requests) {
+//            asyncFetchArticles(it, dispatcher)
+//        }
+//        // 각 코드가 완료될 때까지 대기
+//        requests.forEach {
+//            it.join()
+//        }
+//
+//        // 세 개의 피드에서 동시에 가져온 모든 헤드 라인을 포함하는 headlines 변수
+//        val articles = requests
+//            .filter { !it.isCancelled }
+//            .flatMap { it.getCompleted() }
+//
+//        val failed = requests
+//            .filter { it.isCancelled }
+//            .size
+//        val obtained = requests.size - failed
+//
+//        launch(Dispatchers.Main) {
+//            binding.progressBar.visibility = View.GONE
+//            viewAdapter.add(articles)
+//        }
+//    }
 }

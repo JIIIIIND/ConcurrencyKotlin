@@ -495,3 +495,47 @@ fun main(args: Array<String>) = runBlocking {
     }
 }
 ```
+
+## Android Project 적용
+
+### 어댑터에서 더 많은 기사 요청
+
+사용자가 스크롤할 때 기사를 요청하도록 하기 위해 리스너에 연결해야 함
+
+다음과 같은 인터페이스를 ArticleAdapter 클래스가 있는 파일에 추가
+
+```Kotlin
+interface ArticleLoader {
+    suspend fun loadMore()
+}
+```
+
+어댑터를 사용하는 누구나 적절한 리스너를 보낼 수 있도록 생성자에서 해당 인터페이스의 인스턴스를 받도록 수정
+
+```Kotlin
+class ArticleAdapter(
+    private val loader: ArticleLoader
+): RecyclerView.Adapter<ArticleAdapter.ViewHolder>() {
+    ...
+}
+```
+
+리스너가 필요 이상으로 호출되지 않도록 플래그 설정하고 onBindViewHolder() 함수 내부에서 하단에 가까운 요소 중 하나의 바인딩이 발생할 때 리스너를 호출하도록 수정
+
+```Kotlin
+override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+    val article = articles[position]
+
+    if (!loading && position >= articles.size -2) {
+        loading = true
+        launch {
+            loader.loadMore()
+            loading = false
+        }
+    }
+}
+```
+
+### 온 디맨드 피드를 가져오는 프로듀서
+
+
