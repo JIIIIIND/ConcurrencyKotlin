@@ -538,4 +538,122 @@ override fun onBindViewHolder(holder: ViewHolder, position: Int) {
 
 ### 온 디맨드 피드를 가져오는 프로듀서
 
+ArticleProducer.kt 파일을 생성하고 producer 패키지 내부로 이동
 
+activity의 코드 일부를 이동 할 예정임
+
+```Kotlin
+object ArticleProducer {
+    private val feeds = listOf{
+        ... Feed 목록
+    }
+}
+```
+
+디스패처와 팩토리 역시 이곳으로 이동
+
+```Kotlin
+object ArticleProducer {
+    ...
+    private val dispatcher = nextFixedThreadPoolContext(2, "IO")
+    private val factory = DocumentBuilderFactory.newInstance()
+}
+```
+
+마지막으로 activity의 asyncFetchArticles() 함수를 이동하고 변경함
+
+```Kotlin
+private fun fetchArticles(feed: Feed) : List<Article> {
+        val builder = factory.newDocumentBuilder()
+        val xml = builder.parse(feed.url)
+        val news = xml.getElementsByTagName("channel").item(0)
+
+        return (0 until news.childNodes.length)
+            .map { news.childNodes.item(it) }
+            .filter { Node.ELEMENT_NODE == it.nodeType }
+            .map { it as Element }
+            .filter { "item" == it.tagName }
+            .map {
+                val title = it.getElementsByTagName("title")
+                    .item(0)
+                    .textContent
+                var summary = it.getElementsByTagName("description")
+                    .item(0)
+                    .textContent
+                // Summary가 비어있는 것을 피하기 위해 div로 시작하지 않는 경우에만 잘라냄
+                if (!summary.startsWith("<div")
+                    && summary.contains("<div")) {
+                    summary = summary.substring(0, summary.indexOf("<div"))
+                }
+                Article(feed.name, title, summary)
+            }
+    }
+```
+
+### UI의 목록에 기사 추가하기
+
+activity의 코드를 Producer로 옮겼기 때문에 그에 맞게 변경 함
+
+먼저 MainActivity가 ArticleLoader를 구현하도록 함
+
+```Kotlin
+class MainActivity : AppCompatActivity(), ArticleLoader {
+    ...
+}
+```
+
+loadMore()를 구현해야 함
+
+```Kotlin
+override suspend fun loadMore() {
+    val producer = ArticleProducer.producer
+}
+```
+
+해당 기사가 표시되도록 어댑터에 추가함
+
+```Kotlin
+override suspend fun loadMore() {
+    val producer = ArticleProducer.producer
+
+    if (!producer.isClosedForReceive) {
+        val articles = producer.receive()
+
+        GlobalScope.launch(Dispatchers.Main) {
+            binding.progressBar.visibility = View.GONE
+            viewAdapter.add(articles)
+        }
+    }
+}
+```
+
+어댑터의 로더로 this를 전달하고 launch()로 loadMore를 호출
+
+```Kotlin
+override fun onCreate(savedInstanceState: Bundle?) {
+    ...
+    viewAdapter = ArticleAdapter(this)
+
+    GlobalScope.launch {
+        loadMore()
+    }
+    ...
+}
+```
+
+## 요약
+
+- 필요하지 않을 때 일시 중단되는 여러 유형의 일시 중단 함수에 대해 설명함
+- 시퀀스의 몇 가지 특징은 다음과 같음
+  - 상태 비 저장(stateless)이므로 각 호출 후 자체적으로 재설정 됨
+  - 인덱스로 정보를 검색할 수 있음
+  - 한 번에 여러 값의 그룹을 얻을 수 있음
+- 이터레이터의 몇 가지 특징은 다음과 같음
+  - 상태가 있음
+  - 한 방향으로만 읽을 수 있으므로 이전 요소를 검색할 수 없음
+  - 인덱스로 요소를 검색할 수 없음
+- 시퀀스와 이터레이터는 하나 이상의 값을 생성한 후 일시 중단될 수 있지만 실행의 일부로 일시 중단될 수 없으므로 숫자의 시퀀스와 같은 비동기 작업이 필요 없는 데이터 소스에 적합
+- 시퀀스와 이터레이터는 실행 중에 일시 중단할 수 없으므로 비중단 연산에서 호출할 수 있음
+- 프로듀서는 실행하는 동안을 포함해 언제든지 중단할 수 있음
+- 프로듀서는 실행 중에 일시 중단될 수 있기 때문에 일시 중단 연산이나 코루틴에서만 호출할 수 있음
+- 프로듀서는 채널을 사용해 데이터를 출력함

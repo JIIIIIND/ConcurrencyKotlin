@@ -2,13 +2,16 @@ package com.example.rssreader
 
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.provider.Contacts
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.rssreader.adapter.ArticleAdapter
+import com.example.rssreader.adapter.ArticleLoader
 import com.example.rssreader.databinding.ActivityMainBinding
 import com.example.rssreader.model.Article
 import com.example.rssreader.model.Feed
+import com.example.rssreader.producer.ArticleProducer
 import kotlinx.coroutines.*
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -22,7 +25,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  * 결과를 반환하지 않는 코루틴은 launch를 사용, launch는 연산이 실패한 경우에만 통보 받기를 원하는 시나리오를 위한 설계
  * 예외가 스택에 출력되지만 중단되지 않음
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), ArticleLoader {
     /* 스레드를 하나만 가지는 CoroutinbeDispatecher 생성
      * 이 Dispatcher를 사용하는 코루틴은 모두 특정 스레드에서 실행이 됨
     */
@@ -43,15 +46,35 @@ class MainActivity : AppCompatActivity() {
         Feed("inv", "http://myNewsFeed")
     )
 
+    /*
+     * Chapter05. ArticleLoader를 구현
+     */
+    override suspend fun loadMore() {
+        val producer = ArticleProducer.producer
+
+        if (!producer.isClosedForReceive) {
+            val articles = producer.receive()
+
+            GlobalScope.launch(Dispatchers.Main) {
+                binding.progressBar.visibility = View.GONE
+                viewAdapter.add(articles)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
 
         viewManager = LinearLayoutManager(this)
-        viewAdapter = ArticleAdapter()
+        viewAdapter = ArticleAdapter(this)
         articles = binding.articles.apply {
             layoutManager = viewManager
             adapter = viewAdapter
+        }
+
+        GlobalScope.launch {
+            loadMore()
         }
 
         // 1번 옵션 사용 시 아래와 같이 Dispatcher를 지정해야 함
@@ -104,31 +127,34 @@ class MainActivity : AppCompatActivity() {
     }
      */
 
-//    private fun asyncLoadNews() = GlobalScope.launch {
-//        val requests = mutableListOf<Deferred<List<Article>>>()
-//
-//        // 각 피드별로 가져온 요소를 피드 목록에 추가
-//        feeds.mapTo(requests) {
-//            asyncFetchArticles(it, dispatcher)
-//        }
-//        // 각 코드가 완료될 때까지 대기
-//        requests.forEach {
-//            it.join()
-//        }
-//
-//        // 세 개의 피드에서 동시에 가져온 모든 헤드 라인을 포함하는 headlines 변수
-//        val articles = requests
-//            .filter { !it.isCancelled }
-//            .flatMap { it.getCompleted() }
-//
-//        val failed = requests
-//            .filter { it.isCancelled }
-//            .size
-//        val obtained = requests.size - failed
-//
-//        launch(Dispatchers.Main) {
-//            binding.progressBar.visibility = View.GONE
-//            viewAdapter.add(articles)
-//        }
-//    }
+    /* chapter04까지 사용되는 함수.
+     * asyncFetchArticle을 producer로 개편함에 따라 사용되지 않음
+    private fun asyncLoadNews() = GlobalScope.launch {
+        val requests = mutableListOf<Deferred<List<Article>>>()
+
+        // 각 피드별로 가져온 요소를 피드 목록에 추가
+        feeds.mapTo(requests) {
+            asyncFetchArticles(it, dispatcher)
+        }
+        // 각 코드가 완료될 때까지 대기
+        requests.forEach {
+            it.join()
+        }
+
+        // 세 개의 피드에서 동시에 가져온 모든 헤드 라인을 포함하는 headlines 변수
+        val articles = requests
+            .filter { !it.isCancelled }
+            .flatMap { it.getCompleted() }
+
+        val failed = requests
+            .filter { it.isCancelled }
+            .size
+        val obtained = requests.size - failed
+
+        launch(Dispatchers.Main) {
+            binding.progressBar.visibility = View.GONE
+            viewAdapter.add(articles)
+        }
+    }
+     */
 }
