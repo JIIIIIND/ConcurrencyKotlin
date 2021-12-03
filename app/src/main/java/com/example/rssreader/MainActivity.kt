@@ -67,7 +67,8 @@ class MainActivity : AppCompatActivity(), ArticleLoader {
         setContentView(binding.root)
 
         viewManager = LinearLayoutManager(this)
-        viewAdapter = ArticleAdapter(this)
+//        viewAdapter = ArticleAdapter(this) // Chapter06에서 사용하지 않음
+        viewAdapter = ArticleAdapter()
         articles = binding.articles.apply {
             layoutManager = viewManager
             adapter = viewAdapter

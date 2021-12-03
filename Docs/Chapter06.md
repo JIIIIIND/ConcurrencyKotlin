@@ -334,5 +334,88 @@ channel.send(1) // ClosedChannelException 발생
   - 닫힌 채널에서 호출 시 ClosedReceiveChannelException 발생
 - isEmpty는 deprecated
 
+## RSS에 적용
 
+실제 주요 동작은 Searcher 클래스의 일시 중단 함수인 search
 
+```Kotlin
+private suspend fun search(
+        feed: Feed,
+        channel: SendChannel<Article>,
+        query: String
+        ) {
+        val builder = factory.newDocumentBuilder()
+        val xml = builder.parse(feed.url)
+        val news = xml.getElementsByTagName("channel").item(0)
+
+        (0 until news.childNodes.length)
+            .map { news.childNodes.item(it) }
+            .filter { Node.ELEMENT_NODE == it.nodeType }
+            .map { it as Element }
+            .filter { "item" == it.tagName }
+            .forEach {
+                // 파싱 및 필터링, 모든 콘텐츠를 매핑하는 대신 필터링한 기사를 채널을 통해 전송함
+                val title = it.getElementsByTagName("title")
+                    .item(0)
+                    .textContent
+                var summary = it.getElementsByTagName("description")
+                    .item(0)
+                    .textContent
+
+                if (title.contains(query) || summary.contains(query)) {
+                    if (summary.contains("<div")) {
+                        summary = summary.substring(0, summary.indexOf("<div"))
+                    }
+                    val article = Article(feed.name, title, summary)
+                    channel.send(article)
+                }
+            }
+    }
+    /* 검색 함수 연결
+     * 위의 비공개 search()함수와 쿼리를 받아 receiveChannel을 반환하는 공개 search()함수를 연결
+     * 공개된 search 함수를 호출하는 호출자는 기사를 수신할 수 있음
+     */
+
+    fun search(query: String) : ReceiveChannel<Article> {
+        val channel = Channel<Article>(15)
+
+        feeds.forEach { feed ->
+            GlobalScope.launch(dispatcher) {
+                search(feed, channel, query)
+            }
+        }
+        return channel
+    }
+```
+
+추가/수정되는 코드들은 모두 해당 함수를 사용하는 단계
+
+SearchActivity에서 search 버튼을 누르면 어댑터의 리스트를 정리하고 search를 수행
+
+### Search - SearchActivity
+
+여기서는 searchText에 작성된 쿼리를 받아오고 ReceiveChannel을 얻음
+
+```Kotlin
+val query = binding.searchText.text.toString()
+val channel = searcher.search(query)
+```
+
+해당 채널이 닫히지 않았다면 값을 받아오고 어댑터에 기사를 추가함
+
+조심해야 할 점은 어댑터에 기사를 추가할 때는 MainThread에서 동작해야 한다는 점
+
+## 요약
+
+6장의 주요 내용은 협업 동시성에 관한 내용
+
+- 협업 동시성과 관련된 과제를 해결하기 위해 채널을 사용하는 실제 사례를 살펴봄
+- 채널이 일종의 통신 도구라는 것을 배움
+  - 채널은 스레드와 상관없이 코루틴간에 메시지를 안전하게 보낼 수 있음
+- 언버퍼드 채널은 receive가 호출될 때까지 send를 일시 중단함
+- 세 가지 유형의 버퍼드 채널을 다룸
+  - ConflatedChannel은 마지막 요소만 유지
+  - LinkedListChannel은 무제한 요소를 갖거나, 최소한 가용한 메모리에서 가능한 많은 요소를 가질 수 있어 send에서 중단되지 않음
+  - ArrayChannel은 요소의 양이 버퍼의 크기에 도달하면 send에서 중지
+- SendChannel에서 요소를 전송할 수 있는 send와 offer 및 예외 상황
+- ReceiveChannel에서 요소를 수신받는 경우의 예외
