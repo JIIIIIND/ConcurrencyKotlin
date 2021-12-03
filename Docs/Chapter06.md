@@ -268,3 +268,71 @@ Sent 4
 Received 4
 Took 521ms
 ```
+
+## 채널과 상호작용
+
+```Channel<T>```의 동작은 ```SendChannel<T>```와 ```ReceiveChannel<T>```의 두 개의 인터페이스로 이뤄짐
+
+### SendChannel
+
+채널을 통해 요소를 보내기 위한 몇 개의 함수와 무언가를 보낼 수 있는지 검증하기 위한 함수를 정의함
+
+#### 보내기 전 검증
+
+가장 일반적인 방법은 채널이 닫히지 않았는지 확인하는 것
+
+```Kotlin
+val channel = Channel<Int>()
+channel.isClosedForSend // false
+channel.close()
+channel.isClosedForSend // true
+```
+
+```Channel.isFull```과 ```Channel.isEmpty```는 deprecated되었음
+
+#### 요소 전송
+
+채널을 통해 요소를 전송하려면 ```send()```함수를 사용함
+
+버퍼드 채널에서 버퍼가 가득 차면 송신자를 일시 중단하며, RendezvousChannel이면 receive()가 호출될 때까지 일시 중단하는 일시 중단 함수
+
+```Kotlin
+val channel = Channel<Int>(1)
+channel.send(1)
+```
+
+채널이 닫힌 상태면 ClosedChannelException을 던짐
+
+```Kotlin
+val channel = Channel<Int>(1)
+channel.close()
+channel.send(1) // ClosedChannelException 발생
+```
+
+#### 요소 제공
+
+```offer()```함수는 대기열에 추가할 요소를 가지며, 채널의 상태에 따라 Boolean을 반환하거나 예외를 던짐
+
+- 채널에 닫힌 상태
+  - ```ClosedSendChannelException``` 유형의 예외를 던짐
+- 채널이 가득 찬 상태
+  - false를 반환
+- 채널이 열리고 가득 차지 않은 상태
+  - 요소를 대기열에 추가함
+  - 일시 중단 연산에서 발생하지 않은 채널에 요소를 추가하는 유일한 방법
+
+### ReceiveChannel
+
+5장에서 몇 가지 기본 사항을 다뤘고, 언급되지 않은 몇 가지 함수를 살펴봄
+
+#### 읽기 전 유효성 검사
+
+정보를 읽기 전에 몇 가지 확인할 사항
+
+- isClosedForReceive
+  - 수신에 대해 닫힌 채널인지 여부를 확인
+  - 닫힌 채널에서 호출 시 ClosedReceiveChannelException 발생
+- isEmpty는 deprecated
+
+
+
